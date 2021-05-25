@@ -30,7 +30,7 @@
   "Abbrev table for Sexpy mode.")
 
 (eval-and-compile
-  (defconst sexpy-mode-symbol-regexp "\\(?:\\sw\\|\\s_\\|\\\\.\\)+"))
+ (defconst sexpy-mode-symbol-regexp "\\(?:\\sw\\|\\s_\\|\\\\.\\)+"))
 
 ;;;; Font-lock support.
 
@@ -107,21 +107,19 @@ font-lock keywords will not be case sensitive."
     (set-keymap-parent map sexpy-mode-shared-map)
     (bindings--define-key map [menu-bar lisp] (cons "Sexpy" menu-map))
     (bindings--define-key menu-map [ind-sexp]
-      '(menu-item "Indent sexp" indent-sexp
-		  :help "Indent each line of the list starting just after point"))
+                          '(menu-item "Indent sexp" indent-sexp
+		                      :help "Indent each line of the list starting just after point"))
     map)
   "Keymap for ordinary Sexpy mode.
 All commands in `sexpy-mode-shared-map' are inherited by this map.")
 
 (define-derived-mode sexpy-mode prog-mode "Sexpy"
-  "Major mode for editing Sexpy code for Lisps other than GNU Emacs Lisp.
+  "Major mode for editing Sexpy code.
 Commands:
 Delete converts tabs to spaces as it moves back.
 Blank lines separate paragraphs.  Semicolons start comments.
 
-\\{sexpy-mode-map}
-Note that `run-lisp' may be used either to start an inferior Sexpy job
-or to switch back to an existing one."
+\\{sexpy-mode-map}"
   (sexpy-mode-variables nil t)
   (setq-local find-tag-default-function 'sexpy-find-tag-default)
   (setq-local comment-start-skip
@@ -131,19 +129,19 @@ or to switch back to an existing one."
 (defun sexpy-find-tag-default ()
   (let ((default (find-tag-default)))
     (when (stringp default)
-      (if (string-match ":+" default)
-          (substring default (match-end 0))
-	default))))
+          (if (string-match ":+" default)
+              (substring default (match-end 0))
+	    default))))
 
 (defun sexpy-comment-indent ()
   "Like `comment-indent-default', but don't put space after open paren."
   (or (when (looking-at "\\s<\\s<")
-        (let ((pt (point)))
-          (skip-syntax-backward " ")
-          (if (eq (preceding-char) ?\()
-              (cons (current-column) (current-column))
-            (goto-char pt)
-            nil)))
+            (let ((pt (point)))
+              (skip-syntax-backward " ")
+              (if (eq (preceding-char) ?\()
+                  (cons (current-column) (current-column))
+                (goto-char pt)
+                nil)))
       (comment-indent-default)))
 
 (define-obsolete-function-alias 'sexpy-mode-auto-fill 'do-auto-fill "23.1")
@@ -155,20 +153,11 @@ or to switch back to an existing one."
 (put 'sexpy-indent-offset 'safe-local-variable
      (lambda (x) (or (null x) (integerp x))))
 
-(defcustom sexpy-indent-function 'sexpy-indent-function
-  "A function to be called by `calculate-lisp-indent'.
-It indents the arguments of a Lisp function call.  This function
-should accept two arguments: the indent-point, and the
-`parse-partial-sexp' state at that position.  One option for this
-function is `common-sexpy-indent-function'."
-  :type 'function
-  :group 'lisp)
-
 (defun sexpy-ppss (&optional pos)
   "Return Parse-Partial-Sexp State at POS, defaulting to point.
 Like `syntax-ppss' but includes the character address of the last
 complete sexp in the innermost containing list at position
-2 (counting from 0).  This is important for lisp indentation."
+2 (counting from 0).  This is important for sexpy indentation."
   (unless pos (setq pos (point)))
   (let ((pss (syntax-ppss pos)))
     (if (nth 9 pss)
@@ -182,9 +171,9 @@ complete sexp in the innermost containing list at position
                              (&aux (ppss (sexpy-ppss))
                                    (ppss-point (point))
                                    (stack (make-list (1+ (car ppss)) nil)))))
-  stack ;; Cached indentation, per depth.
-  ppss
-  ppss-point)
+              stack ;; Cached indentation, per depth.
+              ppss
+              ppss-point)
 
 (defun sexpy-indent-calc-next (state)
   "Move to next line and return calculated indent for it.
@@ -196,55 +185,55 @@ by more than one line to cross a string literal."
                 state)
                (indent-depth (car ppss)) ; Corresponding to indent-stack.
                (depth indent-depth))
-    ;; Parse this line so we can learn the state to indent the
-    ;; next line.
-    (while (let ((last-sexp (nth 2 ppss)))
-             (setq ppss (parse-partial-sexp
-                         ppss-point (progn (end-of-line) (point))
-                         nil nil ppss))
-             ;; Preserve last sexp of state (position 2) for
-             ;; `calculate-lisp-indent', if we're at the same depth.
-             (if (and (not (nth 2 ppss)) (= depth (car ppss)))
-                 (setf (nth 2 ppss) last-sexp)
-               (setq last-sexp (nth 2 ppss)))
-             (setq depth (car ppss))
-             ;; Skip over newlines within strings.
-             (and (not (eobp)) (nth 3 ppss)))
-      (let ((string-start (nth 8 ppss)))
-        (setq ppss (parse-partial-sexp (point) (point-max)
-                                       nil nil ppss 'syntax-table))
-        (setf (nth 2 ppss) string-start) ; Finished a complete string.
-        (setq depth (car ppss)))
-      (setq ppss-point (point)))
-    (setq ppss-point (point))
-    (let* ((depth-delta (- depth indent-depth)))
-      (cond ((< depth-delta 0)
-             (setq indent-stack (nthcdr (- depth-delta) indent-stack)))
-            ((> depth-delta 0)
-             (setq indent-stack (nconc (make-list depth-delta nil)
-                                       indent-stack)))))
-    (prog1
-        (let (indent)
-          (cond ((= (forward-line 1) 1)
-                 ;; Can't move to the next line, apparently end of buffer.
-                 nil)
-                ((null indent-stack)
-                 ;; Negative depth, probably some kind of syntax
-                 ;; error.  Reset the state.
-                 (setq ppss (parse-partial-sexp (point) (point))))
-                ((car indent-stack))
-                ((integerp (setq indent (calculate-lisp-indent ppss)))
-                 (setf (car indent-stack) indent))
-                ((consp indent)       ; (COLUMN CONTAINING-SEXP-START)
-                 (car indent))
-                ;; This only happens if we're in a string, but the
-                ;; loop should always skip over strings (unless we hit
-                ;; end of buffer, which is taken care of by the first
-                ;; clause).
-                (t (error "This shouldn't happen"))))
-      (setf (sexpy-indent-state-stack state) indent-stack)
-      (setf (sexpy-indent-state-ppss-point state) ppss-point)
-      (setf (sexpy-indent-state-ppss state) ppss))))
+              ;; Parse this line so we can learn the state to indent the
+              ;; next line.
+              (while (let ((last-sexp (nth 2 ppss)))
+                       (setq ppss (parse-partial-sexp
+                                   ppss-point (progn (end-of-line) (point))
+                                   nil nil ppss))
+                       ;; Preserve last sexp of state (position 2) for
+                       ;; `calculate-sexpy-indent', if we're at the same depth.
+                       (if (and (not (nth 2 ppss)) (= depth (car ppss)))
+                           (setf (nth 2 ppss) last-sexp)
+                         (setq last-sexp (nth 2 ppss)))
+                       (setq depth (car ppss))
+                       ;; Skip over newlines within strings.
+                       (and (not (eobp)) (nth 3 ppss)))
+                (let ((string-start (nth 8 ppss)))
+                  (setq ppss (parse-partial-sexp (point) (point-max)
+                                                 nil nil ppss 'syntax-table))
+                  (setf (nth 2 ppss) string-start) ; Finished a complete string.
+                  (setq depth (car ppss)))
+                (setq ppss-point (point)))
+              (setq ppss-point (point))
+              (let* ((depth-delta (- depth indent-depth)))
+                (cond ((< depth-delta 0)
+                       (setq indent-stack (nthcdr (- depth-delta) indent-stack)))
+                      ((> depth-delta 0)
+                       (setq indent-stack (nconc (make-list depth-delta nil)
+                                                 indent-stack)))))
+              (prog1
+                  (let (indent)
+                    (cond ((= (forward-line 1) 1)
+                           ;; Can't move to the next line, apparently end of buffer.
+                           nil)
+                          ((null indent-stack)
+                           ;; Negative depth, probably some kind of syntax
+                           ;; error.  Reset the state.
+                           (setq ppss (parse-partial-sexp (point) (point))))
+                          ((car indent-stack))
+                          ((integerp (setq indent (calculate-sexpy-indent ppss)))
+                           (setf (car indent-stack) indent))
+                          ((consp indent)       ; (COLUMN CONTAINING-SEXP-START)
+                           (car indent))
+                          ;; This only happens if we're in a string, but the
+                          ;; loop should always skip over strings (unless we hit
+                          ;; end of buffer, which is taken care of by the first
+                          ;; clause).
+                          (t (error "This shouldn't happen"))))
+                (setf (sexpy-indent-state-stack state) indent-stack)
+                (setf (sexpy-indent-state-ppss-point state) ppss-point)
+                (setf (sexpy-indent-state-ppss state) ppss))))
 
 (defun sexpy-indent-region (start end)
   "Indent region as Lisp code, efficiently."
@@ -257,15 +246,15 @@ by more than one line to cross a string literal."
     ;; beginning.  That has O(n^2) complexity.
     (let* ((parse-state (sexpy-indent-initial-state))
            (pr (unless (minibufferp)
-                 (make-progress-reporter "Indenting region..." (point) end))))
+                       (make-progress-reporter "Indenting region..." (point) end))))
       (let ((ppss (sexpy-indent-state-ppss parse-state)))
         (unless (or (and (bolp) (eolp)) (nth 3 ppss))
-          (sexpy-indent-line (calculate-lisp-indent ppss))))
+                (sexpy-indent-line (calculate-sexpy-indent ppss))))
       (let ((indent nil))
         (while (progn (setq indent (sexpy-indent-calc-next parse-state))
                       (< (point) end))
           (unless (or (and (bolp) (eolp)) (not indent))
-            (sexpy-indent-line indent))
+                  (sexpy-indent-line indent))
           (and pr (progress-reporter-update pr (point)))))
       (and pr (progress-reporter-done pr))
       (move-marker end nil))))
@@ -275,7 +264,7 @@ by more than one line to cross a string literal."
   (interactive)
   (let ((pos (- (point-max) (point)))
         (indent (progn (beginning-of-line)
-                       (or indent (calculate-lisp-indent (sexpy-ppss))))))
+                       (or indent (calculate-sexpy-indent (sexpy-ppss))))))
     (skip-chars-forward " \t")
     (if (or (null indent) (looking-at "\\s<\\s<\\s<"))
 	;; Don't alter indentation of a ;;; comment line
@@ -293,9 +282,9 @@ by more than one line to cross a string literal."
       (if (> (- (point-max) pos) (point))
 	  (goto-char (- (point-max) pos))))))
 
-(defvar calculate-lisp-indent-last-sexp)
+(defvar calculate-sexpy-indent-last-sexp)
 
-(defun calculate-lisp-indent (&optional parse-start)
+(defun calculate-sexpy-indent (&optional parse-start)
   "Return appropriate indentation for current line as Lisp code.
 In usual case returns an integer: the column to indent to.
 If the value is nil, that means don't change the indentation
@@ -317,50 +306,50 @@ is the buffer position of the start of the containing expression."
           ;; setting this to a number inhibits calling hook
           (desired-indent nil)
           (retry t)
-          calculate-lisp-indent-last-sexp containing-sexp)
+          calculate-sexpy-indent-last-sexp containing-sexp)
       (cond ((or (markerp parse-start) (integerp parse-start))
              (goto-char parse-start))
             ((null parse-start) (beginning-of-defun))
             (t (setq state parse-start)))
       (unless state
-        ;; Find outermost containing sexp
-        (while (< (point) indent-point)
-          (setq state (parse-partial-sexp (point) indent-point 0))))
+              ;; Find outermost containing sexp
+              (while (< (point) indent-point)
+                (setq state (parse-partial-sexp (point) indent-point 0))))
       ;; Find innermost containing sexp
       (while (and retry
 		  state
                   (> (elt state 0) 0))
         (setq retry nil)
-        (setq calculate-lisp-indent-last-sexp (elt state 2))
+        (setq calculate-sexpy-indent-last-sexp (elt state 2))
         (setq containing-sexp (elt state 1))
         ;; Position following last unclosed open.
         (goto-char (1+ containing-sexp))
         ;; Is there a complete sexp since then?
-        (if (and calculate-lisp-indent-last-sexp
-		 (> calculate-lisp-indent-last-sexp (point)))
+        (if (and calculate-sexpy-indent-last-sexp
+		 (> calculate-sexpy-indent-last-sexp (point)))
             ;; Yes, but is there a containing sexp after that?
-            (let ((peek (parse-partial-sexp calculate-lisp-indent-last-sexp
+            (let ((peek (parse-partial-sexp calculate-sexpy-indent-last-sexp
 					    indent-point 0)))
               (if (setq retry (car (cdr peek))) (setq state peek)))))
       (if retry
           nil
         ;; Innermost containing sexp found
         (goto-char (1+ containing-sexp))
-        (if (not calculate-lisp-indent-last-sexp)
+        (if (not calculate-sexpy-indent-last-sexp)
 	    ;; indent-point immediately follows open paren.
 	    ;; Don't call hook.
             (setq desired-indent (current-column))
 	  ;; Find the start of first element of containing sexp.
-	  (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
+	  (parse-partial-sexp (point) calculate-sexpy-indent-last-sexp 0 t)
 	  (cond ((looking-at "\\s(")
 		 ;; First element of containing sexp is a list.
 		 ;; Indent under that list.
 		 )
 		((> (save-excursion (forward-line 1) (point))
-		    calculate-lisp-indent-last-sexp)
+		    calculate-sexpy-indent-last-sexp)
 		 ;; This is the first line to start within the containing sexp.
 		 ;; It's almost certainly a function call.
-		 (if (= (point) calculate-lisp-indent-last-sexp)
+		 (if (= (point) calculate-sexpy-indent-last-sexp)
 		     ;; Containing sexp has nothing before this line
 		     ;; except the first element.  Indent under that element.
 		     nil
@@ -368,16 +357,16 @@ is the buffer position of the start of the containing expression."
 		   ;; argument of the function call) and indent under.
 		   (progn (forward-sexp 1)
 			  (parse-partial-sexp (point)
-					      calculate-lisp-indent-last-sexp
+					      calculate-sexpy-indent-last-sexp
 					      0 t)))
 		 (backward-prefix-chars))
 		(t
 		 ;; Indent beneath first sexp on same line as
-		 ;; `calculate-lisp-indent-last-sexp'.  Again, it's
+		 ;; `calculate-sexpy-indent-last-sexp'.  Again, it's
 		 ;; almost certainly a function call.
-		 (goto-char calculate-lisp-indent-last-sexp)
+		 (goto-char calculate-sexpy-indent-last-sexp)
 		 (beginning-of-line)
-		 (parse-partial-sexp (point) calculate-lisp-indent-last-sexp
+		 (parse-partial-sexp (point) calculate-sexpy-indent-last-sexp
 				     0 t)
 		 (backward-prefix-chars)))))
       ;; Point is at the point to indent under unless we are inside a string.
@@ -391,203 +380,48 @@ is the buffer position of the start of the containing expression."
                ;; Indent by constant offset
                (goto-char containing-sexp)
                (+ (current-column) sexpy-indent-offset))
-              ;; in this case calculate-lisp-indent-last-sexp is not nil
-              (calculate-lisp-indent-last-sexp
-               (or
-                ;; try to align the parameters of a known function
-                (and sexpy-indent-function
-                     (not retry)
-                     (funcall sexpy-indent-function indent-point state))
-                ;; If the function has no special alignment
-		;; or it does not apply to this argument,
-		;; try to align a constant-symbol under the last
-                ;; preceding constant symbol, if there is such one of
-                ;; the last 2 preceding symbols, in the previous
-                ;; uncommented line.
-                (and (save-excursion
-                       (goto-char indent-point)
-                       (skip-chars-forward " \t")
-                       (looking-at ":"))
-                     ;; The last sexp may not be at the indentation
-                     ;; where it begins, so find that one, instead.
-                     (save-excursion
-                       (goto-char calculate-lisp-indent-last-sexp)
-		       ;; Handle prefix characters and whitespace
-		       ;; following an open paren.  (Bug#1012)
-                       (backward-prefix-chars)
-                       (while (not (or (looking-back "^[ \t]*\\|([ \t]+"
-                                                      (line-beginning-position))
-                                       (and containing-sexp
-                                            (>= (1+ containing-sexp) (point)))))
-                         (forward-sexp -1)
-                         (backward-prefix-chars))
-                       (setq calculate-lisp-indent-last-sexp (point)))
-                     (> calculate-lisp-indent-last-sexp
-                        (save-excursion
-                          (goto-char (1+ containing-sexp))
-                          (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
-                          (point)))
-                     (let ((parse-sexp-ignore-comments t)
-                           indent)
-                       (goto-char calculate-lisp-indent-last-sexp)
-                       (or (and (looking-at ":")
-                                (setq indent (current-column)))
-                           (and (< (line-beginning-position)
-                                   (prog2 (backward-sexp) (point)))
-                                (looking-at ":")
-                                (setq indent (current-column))))
-                       indent))
-                ;; another symbols or constants not preceded by a constant
-                ;; as defined above.
-                normal-indent))
-              ;; in this case calculate-lisp-indent-last-sexp is nil
+              ;; in this case calculate-sexpy-indent-last-sexp is not nil
+              (calculate-sexpy-indent-last-sexp
+               (and (save-excursion
+                      (goto-char indent-point)
+                      (skip-chars-forward " \t")
+                      (looking-at ":"))
+                    ;; The last sexp may not be at the indentation
+                    ;; where it begins, so find that one, instead.
+                    (save-excursion
+                      (goto-char calculate-sexpy-indent-last-sexp)
+		      ;; Handle prefix characters and whitespace
+		      ;; following an open paren.  (Bug#1012)
+                      (backward-prefix-chars)
+                      (while (not (or (looking-back "^[ \t]*\\|([ \t]+"
+                                                    (line-beginning-position))
+                                      (and containing-sexp
+                                           (>= (1+ containing-sexp) (point)))))
+                        (forward-sexp -1)
+                        (backward-prefix-chars))
+                      (setq calculate-sexpy-indent-last-sexp (point)))
+                    (> calculate-sexpy-indent-last-sexp
+                       (save-excursion
+                         (goto-char (1+ containing-sexp))
+                         (parse-partial-sexp (point) calculate-sexpy-indent-last-sexp 0 t)
+                         (point)))
+                    (let ((parse-sexp-ignore-comments t)
+                          indent)
+                      (goto-char calculate-sexpy-indent-last-sexp)
+                      (or (and (looking-at ":")
+                               (setq indent (current-column)))
+                          (and (< (line-beginning-position)
+                                  (prog2 (backward-sexp) (point)))
+                               (looking-at ":")
+                               (setq indent (current-column))))
+                      indent))
+               ;; another symbols or constants not preceded by a constant
+               ;; as defined above.
+               normal-indent)
+              ;; in this case calculate-sexpy-indent-last-sexp is nil
               (desired-indent)
               (t
                normal-indent))))))
-
-(defun sexpy-indent-function (indent-point state)
-  "This function is the normal value of the variable `sexpy-indent-function'.
-The function `calculate-lisp-indent' calls this to determine
-if the arguments of a Lisp function call should be indented specially.
-
-INDENT-POINT is the position at which the line being indented begins.
-Point is located at the point to indent under (for default indentation);
-STATE is the `parse-partial-sexp' state for that position.
-
-If the current line is in a call to a Lisp function that has a non-nil
-property `sexpy-indent-function' (or the deprecated `lisp-indent-hook'),
-it specifies how to indent.  The property value can be:
-
-* `defun', meaning indent `defun'-style
-  (this is also the case if there is no property and the function
-  has a name that begins with \"def\", and three or more arguments);
-
-* an integer N, meaning indent the first N arguments specially
-  (like ordinary function arguments), and then indent any further
-  arguments like a body;
-
-* a function to call that returns the indentation (or nil).
-  `sexpy-indent-function' calls this function with the same two arguments
-  that it itself received.
-
-This function returns either the indentation to use, or nil if the
-Lisp function does not specify a special indentation."
-  (let ((normal-indent (current-column)))
-    (goto-char (1+ (elt state 1)))
-    (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
-    (if (and (elt state 2)
-             (not (looking-at "\\sw\\|\\s_")))
-        ;; car of form doesn't seem to be a symbol
-        (progn
-          (if (not (> (save-excursion (forward-line 1) (point))
-                      calculate-lisp-indent-last-sexp))
-		(progn (goto-char calculate-lisp-indent-last-sexp)
-		       (beginning-of-line)
-		       (parse-partial-sexp (point)
-					   calculate-lisp-indent-last-sexp 0 t)))
-	    ;; Indent under the list or under the first sexp on the same
-	    ;; line as calculate-lisp-indent-last-sexp.  Note that first
-	    ;; thing on that line has to be complete sexp since we are
-          ;; inside the innermost containing sexp.
-          (backward-prefix-chars)
-          (current-column))
-      (let ((function (buffer-substring (point)
-					(progn (forward-sexp 1) (point))))
-	    method)
-	(setq method (or (function-get (intern-soft function)
-                                       'sexpy-indent-function)
-			 (get (intern-soft function) 'lisp-indent-hook)))
-	(cond ((or (eq method 'defun)
-		   (and (null method)
-			(> (length function) 3)
-			(string-match "\\`def" function)))
-	       (lisp-indent-defform state indent-point))
-	      ((integerp method)
-	       (lisp-indent-specform method state
-				     indent-point normal-indent))
-	      (method
-		(funcall method indent-point state)))))))
-
-(defcustom lisp-body-indent 2
-  "Number of columns to indent the second line of a `(def...)' form."
-  :group 'lisp
-  :type 'integer)
-(put 'lisp-body-indent 'safe-local-variable 'integerp)
-
-(defun lisp-indent-specform (count state indent-point normal-indent)
-  (let ((containing-form-start (elt state 1))
-        (i count)
-        body-indent containing-form-column)
-    ;; Move to the start of containing form, calculate indentation
-    ;; to use for non-distinguished forms (> count), and move past the
-    ;; function symbol.  sexpy-indent-function guarantees that there is at
-    ;; least one word or symbol character following open paren of containing
-    ;; form.
-    (goto-char containing-form-start)
-    (setq containing-form-column (current-column))
-    (setq body-indent (+ lisp-body-indent containing-form-column))
-    (forward-char 1)
-    (forward-sexp 1)
-    ;; Now find the start of the last form.
-    (parse-partial-sexp (point) indent-point 1 t)
-    (while (and (< (point) indent-point)
-                (condition-case ()
-                    (progn
-                      (setq count (1- count))
-                      (forward-sexp 1)
-                      (parse-partial-sexp (point) indent-point 1 t))
-                  (error nil))))
-    ;; Point is sitting on first character of last (or count) sexp.
-    (if (> count 0)
-        ;; A distinguished form.  If it is the first or second form use double
-        ;; lisp-body-indent, else normal indent.  With lisp-body-indent bound
-        ;; to 2 (the default), this just happens to work the same with if as
-        ;; the older code, but it makes unwind-protect, condition-case,
-        ;; with-output-to-temp-buffer, et. al. much more tasteful.  The older,
-        ;; less hacked, behavior can be obtained by replacing below with
-        ;; (list normal-indent containing-form-start).
-        (if (<= (- i count) 1)
-            (list (+ containing-form-column (* 2 lisp-body-indent))
-                  containing-form-start)
-            (list normal-indent containing-form-start))
-      ;; A non-distinguished form.  Use body-indent if there are no
-      ;; distinguished forms and this is the first undistinguished form,
-      ;; or if this is the first undistinguished form and the preceding
-      ;; distinguished form has indentation at least as great as body-indent.
-      (if (or (and (= i 0) (= count 0))
-              (and (= count 0) (<= body-indent normal-indent)))
-          body-indent
-          normal-indent))))
-
-(defun lisp-indent-defform (state _indent-point)
-  (goto-char (car (cdr state)))
-  (forward-line 1)
-  (if (> (point) (car (cdr (cdr state))))
-      (progn
-	(goto-char (car (cdr state)))
-	(+ lisp-body-indent (current-column)))))
-
-
-;; (put 'progn 'sexpy-indent-function 0), say, causes progn to be indented
-;; like defun if the first form is placed on the next line, otherwise
-;; it is indented like any other form (i.e. forms line up under first).
-
-(put 'autoload 'sexpy-indent-function 'defun) ;Elisp
-(put 'progn 'sexpy-indent-function 0)
-(put 'prog1 'sexpy-indent-function 1)
-(put 'save-excursion 'sexpy-indent-function 0)      ;Elisp
-(put 'save-restriction 'sexpy-indent-function 0)    ;Elisp
-(put 'save-current-buffer 'sexpy-indent-function 0) ;Elisp
-(put 'let 'sexpy-indent-function 1)
-(put 'let* 'sexpy-indent-function 1)
-(put 'while 'sexpy-indent-function 1)
-(put 'if 'sexpy-indent-function 2)
-(put 'catch 'sexpy-indent-function 1)
-(put 'condition-case 'sexpy-indent-function 2)
-(put 'handler-case 'sexpy-indent-function 1) ;CL
-(put 'handler-bind 'sexpy-indent-function 1) ;CL
-(put 'unwind-protect 'sexpy-indent-function 1)
-(put 'with-output-to-temp-buffer 'sexpy-indent-function 1)
 
 (defun indent-sexp (&optional endpos)
   "Indent each line of the list starting just after point.
@@ -614,13 +448,13 @@ ENDPOS is encountered."
                                                (parse-partial-sexp
                                                 (point) eol)))
                                       0))
-                          (condition-case ()
-                              (while (< (point) eol)
-                                (forward-sexp 1))
-                            ;; But don't signal an error for incomplete
-                            ;; sexps following the first complete sexp
-                            ;; after point.
-                            (scan-error nil))))
+                              (condition-case ()
+                                  (while (< (point) eol)
+                                    (forward-sexp 1))
+                                ;; But don't signal an error for incomplete
+                                ;; sexps following the first complete sexp
+                                ;; after point.
+                                (scan-error nil))))
                       (point)))))
     (save-excursion
       (while (let ((indent (sexpy-indent-calc-next parse-state))
@@ -628,19 +462,19 @@ ENDPOS is encountered."
                ;; If the line contains a comment indent it now with
                ;; `indent-for-comment'.
                (when (and (nth 4 ppss) (<= (nth 8 ppss) endpos))
-                 (save-excursion
-                   (goto-char (sexpy-indent-state-ppss-point parse-state))
-                   (indent-for-comment)
-                   (setf (sexpy-indent-state-ppss-point parse-state)
-                         (line-end-position))))
+                     (save-excursion
+                       (goto-char (sexpy-indent-state-ppss-point parse-state))
+                       (indent-for-comment)
+                       (setf (sexpy-indent-state-ppss-point parse-state)
+                             (line-end-position))))
                (when (< (point) endpos)
-                 ;; Indent the next line, unless it's blank, or just a
-                 ;; comment (we will `indent-for-comment' the latter).
-                 (skip-chars-forward " \t")
-                 (unless (or (eolp) (not indent)
-                             (eq (char-syntax (char-after)) ?<))
-                   (indent-line-to indent))
-                 t))))
+                     ;; Indent the next line, unless it's blank, or just a
+                     ;; comment (we will `indent-for-comment' the latter).
+                     (skip-chars-forward " \t")
+                     (unless (or (eolp) (not indent)
+                                 (eq (char-syntax (char-after)) ?<))
+                             (indent-line-to indent))
+                     t))))
     (move-marker endpos nil)))
 
 (defun indent-pp-sexp (&optional arg)
@@ -658,16 +492,6 @@ A prefix argument specifies pretty-printing."
   (indent-sexp))
 
 ;;;; Lisp paragraph filling commands.
-
-(defcustom emacs-lisp-docstring-fill-column 65
-  "Value of `fill-column' to use when filling a docstring.
-Any non-integer value means do not use a different value of
-`fill-column' when filling docstrings."
-  :type '(choice (integer)
-                 (const :tag "Use the current `fill-column'" t))
-  :group 'lisp)
-(put 'emacs-lisp-docstring-fill-column 'safe-local-variable
-     (lambda (x) (or (eq x t) (integerp x))))
 
 (defun sexpy-fill-paragraph (&optional justify)
   "Like \\[fill-paragraph], but handle Emacs Lisp comments and docstrings.
@@ -705,7 +529,6 @@ and initial semicolons."
       ;; and a quotation mark and ends with a period or (rarely) a comma.
       ;;
       ;; The `fill-column' is temporarily bound to
-      ;; `emacs-lisp-docstring-fill-column' if that value is an integer.
       (let ((paragraph-start
              (concat paragraph-start
                      "\\|\\s-*\\([(;\"]\\|\\s-:\\|`(\\|#'(\\)"))

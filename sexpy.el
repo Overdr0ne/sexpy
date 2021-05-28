@@ -126,6 +126,13 @@ Blank lines separate paragraphs.  Semicolons start comments.
 	      "\\(\\(^\\|[^\\\\\n]\\)\\(\\\\\\\\\\)*\\)\\(;+\\|#|\\) *")
   (setq imenu-case-fold-search t))
 
+(defun sexpy-font-lock-keywords ()
+  '(("(((*\\(.*\\))" 1 font-lock-keyword-face)))
+(font-lock-add-keywords 'sexpy-mode
+                          (sexpy-font-lock-keywords))
+
+(add-to-list 'auto-mode-alist '("\\.sex\\'" . sexpy-mode))
+
 (defun sexpy-find-tag-default ()
   (let ((default (find-tag-default)))
     (when (stringp default)
